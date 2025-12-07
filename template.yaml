@@ -36,6 +36,25 @@ Resources:
       QueueName: !Sub care-giver-notifications-dlq-${Env}
       MessageRetentionPeriod: 1209600  # 14 days
 
+  NotificationScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub care-giver-notification-orchestrator-schedule-${Env}
+      Description: "Scheduled execution for notification orchestration"
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CareGiverNotificationOrchestratorFunction.Arn
+          Id: "NotificationOrchestratorTarget"
+
+  NotificationSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CareGiverNotificationOrchestratorFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt NotificationScheduleRule.Arn
+
   CareGiverNotificationOrchestratorDynamoPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -99,14 +118,6 @@ Resources:
       Runtime: provided.al2
       Architectures:
       - x86_64
-      Events:
-        ScheduledExecution:
-          Type: Schedule
-          Properties:
-            Schedule: !Ref ScheduleExpression
-            Name: !Sub care-giver-notification-orchestrator-schedule-${Env}
-            Description: "Scheduled execution for notification orchestration"
-            Enabled: true
       Environment: 
         Variables:
           ENV: !Ref Env
