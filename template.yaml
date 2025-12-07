@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  care-giver-notification-orchestrator
+
+  Sample SAM Template for care-giver-notification-orchestrator
+
+Parameters:
+  Env:
+    Type: String
+  ScheduleExpression:
+    Type: String
+    Default: "cron(0 2 * * ? *)"
+    Description: "EventBridge schedule expression (e.g., 'rate(5 minutes)' or 'cron(0 12 * * ? *)')"
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+    LoggingConfig:
+      LogFormat: JSON
+Resources:
+  CareGiverNotificationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub care-giver-notifications-${Env}
+      VisibilityTimeout: 180  # 3 minutes (should be > Lambda timeout)
+      MessageRetentionPeriod: 1209600  # 14 days
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CareGiverNotificationDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  CareGiverNotificationDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub care-giver-notifications-dlq-${Env}
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  CareGiverNotificationOrchestratorDynamoPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub DynamoDBCareGiverNotificationOrchestrator-${Env}
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:BatchGetItem
+          - dynamodb:ConditionCheckItem
+          - dynamodb:DescribeTable
+          - dynamodb:GetItem
+          - dynamodb:Scan
+          - dynamodb:Query
+          Resource: 
+          - !Sub arn:aws:dynamodb:${AWS::Region}:658340567265:table/user-table-${Env}
+          - !Sub arn:aws:dynamodb:${AWS::Region}:658340567265:table/user-table-${Env}/index/*
+          - !Sub arn:aws:dynamodb:${AWS::Region}:658340567265:table/relationship-table-${Env}
+          - !Sub arn:aws:dynamodb:${AWS::Region}:658340567265:table/relationship-table-${Env}/index/*
+        - Effect: Allow
+          Action:
+          - sqs:SendMessage
+          - sqs:GetQueueAttributes
+          - sqs:GetQueueUrl
+          Resource: 
+          - !GetAtt CareGiverNotificationQueue.Arn
+          - !GetAtt CareGiverNotificationDeadLetterQueue.Arn
+      Roles:
+      - Ref: CareGiverNotificationOrchestratorRole
+    Metadata:
+      SamResourceId: CareGiverNotificationOrchestratorPolicy
+  CareGiverNotificationOrchestratorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub CareGiverNotificationOrchestratorRole-${Env}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    Metadata:
+      SamResourceId: CareGiverNotificationOrchestratorRole
+  CareGiverNotificationOrchestratorFunction:
+    Type: AWS::Serverless::Function 
+    Metadata:
+      BuildMethod: go1.x
+      SamResourceId: CareGiverNotificationOrchestratorFunction
+    Properties:
+      FunctionName: !Sub care-giver-notification-orchestrator-${Env}
+      Role: !GetAtt CareGiverNotificationOrchestratorRole.Arn
+      CodeUri: function.zip
+      Handler: bootstrap
+      Runtime: provided.al2
+      Architectures:
+      - x86_64
+      Events:
+        ScheduledExecution:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Name: !Sub care-giver-notification-orchestrator-schedule-${Env}
+            Description: "Scheduled execution for notification orchestration"
+            Enabled: true
+      Environment: 
+        Variables:
+          ENV: !Ref Env
+          USER_TABLE_NAME: !Sub user-table-${Env}
+          RELATIONSHIP_TABLE_NAME: !Sub relationship-table-${Env}
+          SQS_QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/care-giver-notifications-${Env}
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name: !Sub ApplicationInsights-SAM-${AWS::StackName}
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Ref: ApplicationResourceGroup
+      AutoConfigurationEnabled: 'true'
+Outputs:
+  CareGiverNotificationOrchestratorFunction:
+    Description: "Lambda Function ARN"
+    Value: !GetAtt CareGiverNotificationOrchestratorFunction.Arn
+
+  CareGiverNotificationOrchestratorFunctionRole:
+    Description: "IAM Role ARN for Lambda Function"
+    Value: !GetAtt CareGiverNotificationOrchestratorRole.Arn
+
+  ScheduleExpression:
+    Description: "EventBridge Schedule Expression"
+    Value: !Ref ScheduleExpression
+
+  CareGiverNotificationQueueUrl:
+    Description: "SQS Queue URL for notifications"
+    Value: !Ref CareGiverNotificationQueue
+
+  CareGiverNotificationDeadLetterQueueUrl:
+    Description: "SQS Dead Letter Queue URL"
+    Value: !Ref CareGiverNotificationDeadLetterQueue
