@@ -9,11 +9,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/care-giver-app/care-giver-golang-common/pkg/awsconfig"
+	"github.com/care-giver-app/care-giver-golang-common/pkg/dynamo"
+	"github.com/care-giver-app/care-giver-golang-common/pkg/relationship"
+	"github.com/care-giver-app/care-giver-golang-common/pkg/repository"
 	"github.com/care-giver-app/care-giver-notification-orchestrator/internal/appconfig"
-	"github.com/care-giver-app/care-giver-notification-orchestrator/internal/awsconfig"
-	"github.com/care-giver-app/care-giver-notification-orchestrator/internal/dynamo"
-	"github.com/care-giver-app/care-giver-notification-orchestrator/internal/relationship"
-	"github.com/care-giver-app/care-giver-notification-orchestrator/internal/repository"
 	"github.com/care-giver-app/care-giver-notification-orchestrator/internal/sqs"
 	"go.uber.org/zap"
 )
@@ -46,11 +46,11 @@ func init() {
 
 	appCfg.AWSConfig = cfg
 
-	dynamoClient = dynamo.CreateClient(appCfg)
+	dynamoClient = dynamo.CreateClient(appCfg.Env, appCfg.AWSConfig, appCfg.Logger)
 	sqsClient = sqs.CreateClient(appCfg)
 
 	appCfg.Logger.Info("initializing relationship repository")
-	relationshipRepo = repository.NewRelationshipRepository(context.TODO(), appCfg, dynamoClient)
+	relationshipRepo = repository.NewRelationshipRepository(context.TODO(), appCfg.RelationshipTableName, dynamoClient, appCfg.Logger)
 }
 
 func handler(ctx context.Context, event events.CloudWatchEvent) error {
