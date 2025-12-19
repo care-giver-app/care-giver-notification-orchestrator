@@ -10,7 +10,7 @@ Parameters:
     Type: String
   ScheduleExpression:
     Type: String
-    Default: "cron(0 2 * * ? *)"
+    Default: "cron(0 4 * * ? *)"
     Description: "EventBridge schedule expression (e.g., 'rate(5 minutes)' or 'cron(0 12 * * ? *)')"
 
 Globals:
