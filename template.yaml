@@ -13,6 +13,9 @@ Parameters:
     Default: "cron(0 4 * * ? *)"
     Description: "EventBridge schedule expression (e.g., 'rate(5 minutes)' or 'cron(0 12 * * ? *)')"
 
+Conditions:
+  IsProd: !Equals [!Ref Env, "prod"]
+
 Globals:
   Function:
     Timeout: 30
@@ -127,12 +130,14 @@ Resources:
 
   ApplicationResourceGroup:
     Type: AWS::ResourceGroups::Group
+    Condition: IsProd
     Properties:
       Name: !Sub ApplicationInsights-SAM-${AWS::StackName}
       ResourceQuery:
         Type: CLOUDFORMATION_STACK_1_0
   ApplicationInsightsMonitoring:
     Type: AWS::ApplicationInsights::Application
+    Condition: IsProd
     Properties:
       ResourceGroupName:
         Ref: ApplicationResourceGroup
