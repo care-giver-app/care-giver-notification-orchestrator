@@ -29,10 +29,14 @@ var (
 	relationshipRepo *repository.RelationshipRepository
 )
 
-type NotificationMessage struct {
-	Relationship     relationship.Relationship `json:"relationship"`
-	NotificationType string                    `json:"notification_type"`
-	Channel          []string                  `json:"channel"`
+type Notification struct {
+	NotificationType string   `json:"notification_type"`
+	Channel          []string `json:"channel"`
+	ExecutionData    any      `json:"execution_data"`
+}
+
+type ReminderNotification struct {
+	Relationship relationship.Relationship `json:"relationship"`
 }
 
 func init() {
@@ -71,8 +75,10 @@ func handler(ctx context.Context, event events.CloudWatchEvent) error {
 	appCfg.Logger.Sugar().Infof("retrieved relationships: %v", relationships)
 
 	for _, r := range relationships {
-		notificationMessage := NotificationMessage{
-			Relationship:     r,
+		notificationMessage := Notification{
+			ExecutionData: ReminderNotification{
+				Relationship: r,
+			},
 			NotificationType: "reminder",
 			Channel:          []string{"email"},
 		}
